@@ -9,6 +9,9 @@ import os
 from openpyxl import Workbook
 import requests
 import unicodedata
+import re
+
+import html
 
 # définir une fonction qui va cliquer sur un bouton avec selenium à partir de son xpath
 def click_button_with_selenium(driver, xpath, timeout=10):
@@ -37,6 +40,26 @@ def extract_octopus_best_seller_products(driver):
     Extrait les produits de la section 'octopus-pc-card' (meilleures ventes) sur Amazon.
     Retourne une liste de dictionnaires avec les infos principales.
     """
+
+    def convertir_url_amazon(url):
+        """
+        Convertit une URL d'image Amazon du format _SR360,460 vers _SX679_
+        
+        Args:
+            url (str): URL d'origine au format _SR360,460
+            
+        Returns:
+            str: URL convertie au format _SX679_
+        """
+        # Pattern pour matcher _AC._SR360,460 et le remplacer par _AC_SX679_
+        pattern = r'_AC\._SR\d+,\d+'
+        replacement = '_AC_SX679_'
+        
+        # Effectuer la substitution
+        nouvelle_url = re.sub(pattern, replacement, url)
+        
+        return nouvelle_url
+
     produits = []
     try:
         # Attendre que la section soit présente
@@ -56,6 +79,7 @@ def extract_octopus_best_seller_products(driver):
                 try:
                     img = item.find_element(By.CSS_SELECTOR, 'img.octopus-pc-item-image')
                     image = img.get_attribute('src')
+                    image = convertir_url_amazon(image)
                 except:
                     image = ''
                 # Prix
@@ -98,6 +122,74 @@ def extract_all_octopus_sections(driver):
     Extrait toutes les sections octopus (meilleures ventes, etc.) avec leur titre et leurs produits.
     Retourne une liste de dicts : { 'titre': str, 'produits': [dict, ...] }
     """
+
+    def convertir_url_amazon(url):
+        """
+        Convertit une URL d'image Amazon du format _SR360,460 vers _SX679_
+        
+        Args:
+            url (str): URL d'origine au format _SR360,460
+            
+        Returns:
+            str: URL convertie au format _SX679_
+        """
+        # Pattern pour matcher _AC._SR360,460 et le remplacer par _AC_SX679_
+        pattern = r'_AC\._SR\d+,\d+'
+        replacement = '_AC_SX679_'
+        
+        # Effectuer la substitution
+        nouvelle_url = re.sub(pattern, replacement, url)
+        
+        return nouvelle_url
+
+
+    def nettoyer_titre(titre):
+        """
+        Nettoie un titre en décodant les entités HTML et en corrigeant les caractères mal encodés
+        
+        Args:
+            titre (str): Titre à nettoyer
+            
+        Returns:
+            str: Titre nettoyé
+        """
+        # Étape 1: Décoder les entités HTML standard
+        titre_nettoye = html.unescape(titre)
+        
+        # Étape 2: Corriger les entités HTML mal encodées courantes
+        corrections = {
+            '&amp;#39;': "'",           # Apostrophe mal encodée
+            '&#39;': "'",              # Apostrophe HTML
+            '&amp;quot;': '"',         # Guillemets mal encodés
+            '&#34;': '"',              # Guillemets HTML
+            '&amp;amp;': '&',          # Esperluette mal encodée
+            '&amp;lt;': '<',           # Inférieur mal encodé
+            '&amp;gt;': '>',           # Supérieur mal encodé
+            '&amp;#034;': '"',         # Autre forme de guillemets
+            '&amp;#8217;': "'",        # Apostrophe typographique
+            '&amp;#8220;': '"',        # Guillemet ouvrant
+            '&amp;#8221;': '"',        # Guillemet fermant
+            '&amp;#8211;': '–',        # Tiret en
+            '&amp;#8212;': '—',        # Tiret em
+            '&amp;nbsp;': ' ',         # Espace insécable
+        }
+        
+        # Appliquer les corrections
+        for mauvais, bon in corrections.items():
+            titre_nettoye = titre_nettoye.replace(mauvais, bon)
+        
+        # Étape 3: Nettoyer les doubles apostrophes consécutives
+        titre_nettoye = re.sub(r"'{2,}", "'", titre_nettoye)
+        
+        # Étape 4: Nettoyer les espaces multiples
+        titre_nettoye = re.sub(r'\s+', ' ', titre_nettoye)
+        
+        # Étape 5: Supprimer les espaces en début et fin
+        titre_nettoye = titre_nettoye.strip()
+        
+        return titre_nettoye
+
+
     sections = []
     try:
         cards = driver.find_elements(By.CSS_SELECTOR, 'div.octopus-pc-card.octopus-best-seller-card')
@@ -113,10 +205,12 @@ def extract_all_octopus_sections(driver):
                 try:
                     a_tag = item.find_element(By.CSS_SELECTOR, 'a.octopus-pc-item-link')
                     nom = a_tag.get_attribute('title') or a_tag.text
+                    nom = nettoyer_titre(nom)  # Nettoyer le titre
                     lien = a_tag.get_attribute('href')
                     try:
                         img = item.find_element(By.CSS_SELECTOR, 'img.octopus-pc-item-image')
                         image = img.get_attribute('src')
+                        image = convertir_url_amazon(image)
                     except:
                         image = ''
                     try:
